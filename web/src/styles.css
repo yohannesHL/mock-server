@@ -267,6 +267,37 @@ code, pre { font-family: var(--mono); }
 .toast.error { border-color: #694142; background: #2b1d1f; color: #f0c3bf; }
 .toast-icon { display: grid; place-items: center; color: var(--accent); }
 .toast.error .toast-icon { color: var(--danger); }
+.project-stat-grid { margin-top: 4px; }
+.project-panel { margin-top: 14px; }
+.project-list { display: grid; }
+.project-row { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 14px 18px; padding: 17px 18px; border-top: 1px solid #202c32; }
+.project-main { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.project-icon { display: grid; width: 35px; height: 35px; flex: 0 0 auto; place-items: center; border: 1px solid #344148; border-radius: 8px; background: #141e24; color: #9aabb0; }
+.project-icon.active { border-color: #365943; background: #15241b; color: #99d5a8; }
+.project-main h3 { margin: 0 0 4px; color: #e3eaea; font-size: 12px; font-weight: 550; }
+.project-main p { margin: 0; color: #89999e; font-size: 9px; }
+.project-main code, .project-endpoints code { color: #a7b9bb; font: 9px var(--mono); }
+.project-row > .status-pill { align-self: center; }
+.project-actions { display: flex; align-items: center; gap: 8px; }
+.project-endpoints { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 7px; }
+.project-endpoints a { display: flex; min-width: 0; align-items: center; gap: 9px; padding: 8px 10px; border: 1px solid #26333a; border-radius: 6px; background: #0d151a; color: #b8c5c8; text-decoration: none; font-size: 10px; }
+.project-endpoints a:hover { border-color: #466a52; background: #111d17; }
+.project-endpoints a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-endpoints a code { overflow: hidden; flex: 1; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.project-endpoints a svg { flex: 0 0 auto; color: #8da49a; }
+.project-endpoints > p { margin: 2px 0; color: #78898e; font-size: 10px; }
+.project-panel-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 17px; border-top: 1px solid #202c32; color: #87969b; font-size: 9px; }
+.project-panel-foot code { color: #aac2b1; font: 9px var(--mono); }
+.managed-label { color: #8f9fa4; font-size: 9px; white-space: nowrap; }
+.project-token-content { display: grid; gap: 14px; padding: 16px 18px 18px; }
+.project-token-content .modal-description { margin: 0; line-height: 1.6; }
+.project-token-content > label { display: grid; gap: 7px; color: #bac5c7; font-size: 10px; font-weight: 500; }
+.token-value { display: flex; min-width: 0; align-items: center; gap: 8px; padding: 7px; border: 1px solid #35444a; border-radius: 6px; background: #0a1117; }
+.token-value code { overflow: hidden; flex: 1; color: #c0d9c7; font: 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.token-note { display: flex; align-items: flex-start; gap: 8px; padding: 10px; border: 1px solid #334b3d; border-radius: 6px; background: #14221a; color: #a5b7aa; font-size: 10px; line-height: 1.5; }
+.token-note svg { flex: 0 0 auto; color: #9ed3ac; }
+.token-note code { color: #c6d5c9; }
+.project-token-content .modal-actions { justify-content: flex-end; margin-top: 0; padding-top: 12px; border-top: 1px solid #25323a; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 .spin { animation: spin 900ms linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -328,6 +359,10 @@ code, pre { font-family: var(--mono); }
   .environment-table { min-width: 800px; }
   .table-foot { padding: 0 13px; font-size: 9px; }
   .bottom-grid, .detail-lower-grid { grid-template-columns: 1fr; }
+  .project-row { grid-template-columns: 1fr; }
+  .project-actions { flex-wrap: wrap; justify-content: space-between; }
+  .project-endpoints { grid-column: auto; }
+  .project-panel-foot { align-items: flex-start; flex-direction: column; }
   .provider-grid { grid-template-columns: 1fr; }
   .provider-card { min-height: 176px; }
   .detail-heading { display: grid; align-items: start; }

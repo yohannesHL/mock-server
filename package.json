@@ -1,8 +1,8 @@
 {
   "name": "mock-server",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
+  "bin": { "mock-server": "bin/mock-server.mjs" },
   "engines": {
     "node": ">=24.0.0 <27"
   },
@@ -13,6 +13,7 @@
     "build": "tsc -p tsconfig.server.json && vite build",
     "start": "node --env-file-if-exists=.env dist/server/index.js",
     "start:test": "NODE_ENV=test node --env-file-if-exists=.env --import tsx server/index.ts",
+    "cli": "node bin/mock-server.mjs",
     "fixtures:validate": "mockoon-cli validate --data providers/*.json providers/marketing-app/*.json"
   },
   "dependencies": {

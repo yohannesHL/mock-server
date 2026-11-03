@@ -2,7 +2,7 @@ import Fastify, { type FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
 import httpProxy from "http-proxy";
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createRequire } from "node:module";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
@@ -38,6 +38,16 @@ const addRouteSchema = z.object({
     z.string().max(8_000).refine((value) => !/[\r\n]/.test(value), "Header values cannot contain line breaks.")).refine((value) => Object.keys(value).length <= 32).optional(),
   latency: z.number().int().min(0).max(10_000).default(0),
 });
+const projectCreateSchema = z.object({ name: z.string().trim().min(2).max(64) });
+const projectConfigSchema = z.object({
+  name: z.string().trim().min(2).max(64),
+  environments: z.array(z.object({
+    name: z.string().trim().min(2).max(64),
+    slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,31}[a-z0-9])?$/).optional(),
+    templateId: z.string().regex(/^[a-z0-9-]+$/).optional(),
+    data: z.record(z.string(), z.unknown()).optional(),
+  }).refine((environment) => environment.templateId || environment.data, "Provide a template or environment document.")).min(1).max(32),
+}).strict();
 
 type Template = { id: string; name: string; provider: string; description: string; data: Record<string, any> };
 
@@ -83,12 +93,21 @@ function hasSession(request: FastifyRequest) {
   return validSession(request.cookies?.[cookieName]);
 }
 
-function makeSlug(name: string, existing: EnvironmentRecord[]) {
-  const base = slugify(name);
+function bearerToken(request: FastifyRequest) {
+  const value = request.headers.authorization;
+  return value?.startsWith("Bearer ") ? value.slice(7).trim() : "";
+}
+
+function makeSlug(name: string, existing: Array<{ slug: string }>, maxLength = 44) {
+  const base = slugify(name).slice(0, maxLength);
   const used = new Set(existing.map((environment) => environment.slug));
   if (!used.has(base)) return base;
-  for (let index = 2; index < 1000; index++) if (!used.has(`${base}-${index}`)) return `${base}-${index}`;
-  return `${base}-${randomUUID().slice(0, 8)}`;
+  for (let index = 2; index < 1000; index++) {
+    const suffix = `-${index}`;
+    const candidate = `${base.slice(0, maxLength - suffix.length)}${suffix}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  return `${base.slice(0, maxLength - 9)}-${randomUUID().slice(0, 8)}`;
 }
 
 function regenerateUuids(value: any) {
@@ -172,7 +191,7 @@ async function main() {
     const suffix = `.${config.baseDomain}`;
     if (!hostname.endsWith(suffix)) return;
     const slug = hostname.slice(0, -suffix.length);
-    if (!/^[a-z0-9][a-z0-9-]{0,50}$/.test(slug)) return;
+    if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(slug)) return;
     const target = await runtime.resolveSlug(slug);
     if (!target) {
       reply.code(404).send({ error: "Mock environment is not deployed", slug });
@@ -195,6 +214,7 @@ async function main() {
   app.addHook("preHandler", async (request, reply) => {
     if (!request.url.startsWith("/api/")) return;
     if (["/api/health", "/api/auth/status", "/api/auth/login", "/api/auth/logout"].includes(request.url.split("?")[0])) return;
+    if (request.url.startsWith("/api/cli/")) return;
     if (request.url.startsWith("/api/test/") && config.nodeEnv === "test" && config.testToken
       && request.headers["x-mock-server-test-token"] === config.testToken) return;
     if (!hasSession(request)) return reply.code(401).send({ error: "Sign in to manage mock environments." });
@@ -222,6 +242,113 @@ async function main() {
 
   app.get("/api/templates", async () => [...templates.values()].map(({ data, ...template }) => ({ ...template, routeCount: data.routes?.length ?? 0 })));
   app.get("/api/environments", async () => Promise.all((await store.list()).map((environment) => runtime.details(environment))));
+  app.get("/api/projects", async () => Promise.all((await store.listProjects()).map(async (project) => ({
+    id: project.id, name: project.name, slug: project.slug,
+    status: await store.isProjectActive(project.id) ? "active" : "inactive",
+    environments: await Promise.all((await store.listProjectEnvironments(project.id)).map((environment) => runtime.details(environment))),
+    createdAt: project.createdAt,
+  }))));
+
+  app.post<{ Body: unknown }>("/api/projects", async (request, reply) => {
+    const parsed = projectCreateSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Enter a project name between 2 and 64 characters." });
+    const existing = await store.listProjects();
+    const token = randomBytes(32).toString("base64url");
+    try {
+      const project = await store.createProject({ name: parsed.data.name, slug: makeSlug(parsed.data.name, existing, 29), token });
+      return reply.code(201).send({ project: { id: project.id, name: project.name, slug: project.slug, status: "inactive", environments: [], createdAt: project.createdAt }, token });
+    } catch (error) {
+      request.log.warn({ err: error }, "Could not create project");
+      return reply.code(409).send({ error: "A project with that name already exists." });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>("/api/projects/:id/token", async (request, reply) => {
+    const project = await store.getProject(request.params.id);
+    if (!project) return reply.code(404).send({ error: "Project not found." });
+    const token = randomBytes(32).toString("base64url");
+    for (const environment of await store.listProjectEnvironments(project.id)) await runtime.stop(environment.id);
+    await store.rotateProjectToken(project.id, token);
+    return { project: { id: project.id, name: project.name, slug: project.slug, status: "inactive" }, token };
+  });
+
+  app.post<{ Body: unknown }>("/api/cli/start", async (request, reply) => {
+    const project = await store.getProjectByToken(bearerToken(request));
+    if (!project) return reply.code(401).send({ error: "A valid project token is required." });
+    const parsed = projectConfigSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "The project config must include a name and at least one valid environment." });
+    if (parsed.data.name.toLowerCase() !== project.name.toLowerCase()) return reply.code(403).send({ error: "This token is linked to a different project name." });
+
+    const definitions = parsed.data.environments.map((environment) => {
+      const template = environment.templateId ? templates.get(environment.templateId) : undefined;
+      return { ...environment, template, source: environment.data ?? template?.data };
+    });
+    const missingTemplate = definitions.find((definition) => definition.templateId && !definition.template);
+    if (missingTemplate) return reply.code(404).send({ error: `Provider template not found: ${missingTemplate.templateId}` });
+    if (definitions.some((definition) => !definition.source)) return reply.code(400).send({ error: "Each environment must reference a known template or include a document." });
+
+    const prepared: Array<{ name: string; slug: string; provider: string; data: Record<string, any> }> = [];
+    const seenSlugs = new Set<string>();
+    for (const definition of definitions) {
+      const key = definition.slug ?? slugify(definition.name);
+      const slug = `${project.slug}-${key}`.slice(0, 63).replace(/-+$/g, "");
+      if (seenSlugs.has(slug)) return reply.code(400).send({ error: `Project config contains duplicate environment URL: ${slug}` });
+      seenSlugs.add(slug);
+      const existing = await store.getBySlug(slug);
+      if (existing && existing.projectId !== project.id) return reply.code(409).send({ error: `Environment URL is already in use: ${slug}` });
+      const provider = definition.template?.provider ?? definition.name;
+      const source = definition.data ?? (existing?.provider === provider ? existing.data : definition.template?.data);
+      if (!source || typeof source !== "object" || Array.isArray(source)) return reply.code(400).send({ error: `No environment data is available for ${definition.name}.` });
+      const data = existing && source === existing.data ? structuredClone(source) : regenerateUuids(structuredClone(source));
+      data.name = definition.name;
+      data.hostname = "127.0.0.1";
+      data.port = 0;
+      try { await validateEnvironment(data, config.dataDir); }
+      catch (error) { return reply.code(422).send({ error: `Mockoon rejected ${definition.name}.`, detail: error instanceof Error ? error.message : "Validation failed" }); }
+      prepared.push({ name: definition.name, slug, provider, data });
+    }
+
+    try {
+      await store.touchProject(project.id);
+      const activeIds = new Set<string>();
+      const started = [];
+      for (const definition of prepared) {
+        let environment = await store.getBySlug(definition.slug);
+        if (environment) {
+          environment = await store.updateProjectEnvironment(environment.id, definition) as EnvironmentRecord;
+        } else {
+          environment = await store.create({ ...definition, projectId: project.id });
+        }
+        activeIds.add(environment.id);
+        started.push(await runtime.deploy(environment));
+      }
+      for (const stale of await store.listProjectEnvironments(project.id)) {
+        if (activeIds.has(stale.id)) continue;
+        await runtime.remove(stale.id);
+      }
+      await store.touchProject(project.id);
+      return { project: { id: project.id, name: project.name, status: "active" }, environments: started };
+    } catch (error) {
+      for (const environment of await store.listProjectEnvironments(project.id)) await runtime.stop(environment.id);
+      await store.stopProject(project.id);
+      return reply.code(422).send({ error: error instanceof Error ? error.message : "Could not start the project environments." });
+    }
+  });
+
+  app.post("/api/cli/heartbeat", async (request, reply) => {
+    const project = await store.getProjectByToken(bearerToken(request));
+    if (!project) return reply.code(401).send({ error: "A valid project token is required." });
+    await store.touchProject(project.id);
+    return { project: project.name, status: "active" };
+  });
+
+  app.post("/api/cli/stop", async (request, reply) => {
+    const project = await store.getProjectByToken(bearerToken(request));
+    if (!project) return reply.code(401).send({ error: "A valid project token is required." });
+    for (const environment of await store.listProjectEnvironments(project.id)) await runtime.stop(environment.id);
+    await store.stopProject(project.id);
+    return { project: project.name, status: "inactive" };
+  });
   app.post<{ Body: unknown }>("/api/environments", async (request, reply) => {
     const parsed = mockUrlSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Enter a name and choose a provider template." });
@@ -370,9 +497,14 @@ async function main() {
 
   await runtime.restore();
   await app.listen({ host: config.host, port: config.port });
+  const projectMonitor = setInterval(() => {
+    void runtime.stopInactiveProjects().catch((error) => app.log.error(error, "Could not stop disconnected project runtimes"));
+  }, 5000);
+  projectMonitor.unref();
   app.log.info(`Mock Server is listening on ${config.host}:${config.port}; runtime URLs use *.${config.baseDomain}`);
 
   const shutdown = async () => {
+    clearInterval(projectMonitor);
     await runtime.shutdown();
     await app.close();
     await store.close();

@@ -3,7 +3,7 @@ import {
   Activity, ArrowLeft, ArrowUpRight, Box, Check, ChevronDown, CircleHelp,
   Clipboard, Code2, Copy, Database, ExternalLink, FileJson2, Globe2,
   LoaderCircle, LogOut, Plus, Radio, RefreshCw, Search, Server, Settings2,
-  ShieldCheck, SquareTerminal, Trash2, X, Zap,
+  ShieldCheck, SquareTerminal, Trash2, X, Zap, FolderGit2, KeyRound,
 } from "lucide-react";
 
 type Template = { id: string; name: string; provider: string; description: string; routeCount: number };
@@ -12,9 +12,11 @@ type MockRoute = { uuid: string; method: string; endpoint: string; responses: Mo
 type EnvironmentData = { uuid: string; name: string; routes: MockRoute[]; [key: string]: any };
 type Environment = {
   id: string; name: string; slug: string; provider: string; status: "stopped" | "running" | "error";
-  url: string; internalPort?: number; data?: EnvironmentData; testInstance?: boolean;
+  url: string; internalPort?: number; data?: EnvironmentData; projectId?: string | null; testInstance?: boolean;
 };
 type AuthState = { authenticated: boolean; email: string };
+type Project = { id: string; name: string; slug: string; status: "active" | "inactive"; environments: Environment[]; createdAt: string };
+type ProjectCredential = { project: Pick<Project, "id" | "name" | "slug">; token: string };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -38,14 +40,16 @@ export function App() {
   const [auth, setAuth] = useState<AuthState | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [modal, setModal] = useState<"create" | "route" | null>(null);
+  const [modal, setModal] = useState<"create" | "route" | "project" | null>(null);
+  const [projectCredential, setProjectCredential] = useState<ProjectCredential | null>(null);
   const [createTemplate, setCreateTemplate] = useState("");
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [query, setQuery] = useState("");
-  const [view, setView] = useState<"environments" | "providers">("environments");
+  const [view, setView] = useState<"environments" | "providers" | "projects">("environments");
 
   const selected = environments.find((environment) => environment.id === selectedId) ?? null;
   const runningCount = environments.filter((environment) => environment.status === "running").length;
@@ -59,11 +63,12 @@ export function App() {
       const status = await request<AuthState>("/api/auth/status");
       setAuth(status);
       if (status.authenticated) {
-        const [nextTemplates, nextEnvironments] = await Promise.all([
-          request<Template[]>("/api/templates"), request<Environment[]>("/api/environments"),
+        const [nextTemplates, nextEnvironments, nextProjects] = await Promise.all([
+          request<Template[]>("/api/templates"), request<Environment[]>("/api/environments"), request<Project[]>("/api/projects"),
         ]);
         setTemplates(nextTemplates);
         setEnvironments(nextEnvironments);
+        setProjects(nextProjects);
         setSelectedId((current) => current && nextEnvironments.some((item) => item.id === current) ? current : null);
       }
     } catch (error) {
@@ -78,6 +83,19 @@ export function App() {
 
   useEffect(() => { void loadData(); }, []);
 
+  useEffect(() => {
+    if (!auth?.authenticated || view !== "projects") return;
+    let disposed = false;
+    const refreshProjects = async () => {
+      try {
+        const next = await request<Project[]>("/api/projects");
+        if (!disposed) setProjects(next);
+      } catch { /* Keep the last dashboard state while the service is unreachable. */ }
+    };
+    const timer = window.setInterval(() => void refreshProjects(), 3000);
+    return () => { disposed = true; window.clearInterval(timer); };
+  }, [auth?.authenticated, view]);
+
   async function createEnvironment(name: string, templateId: string) {
     try {
       const created = await request<Environment>("/api/environments", { method: "POST", body: JSON.stringify({ name, templateId }) });
@@ -87,6 +105,28 @@ export function App() {
       setModal(null);
       notify("success", "Mock environment created.");
     } catch (error) { notify("error", error instanceof Error ? error.message : "Could not create environment."); }
+  }
+
+  async function createProject(name: string) {
+    try {
+      const created = await request<ProjectCredential>("/api/projects", { method: "POST", body: JSON.stringify({ name }) });
+      setProjectCredential(created);
+      setModal(null);
+      setView("projects");
+      await loadData();
+      setProjectCredential(created);
+      notify("success", "Project token created. Copy it now; it is shown only once.");
+    } catch (error) { notify("error", error instanceof Error ? error.message : "Could not create project."); }
+  }
+
+  async function rotateProjectToken(project: Project) {
+    try {
+      const rotated = await request<ProjectCredential>(`/api/projects/${encodeURIComponent(project.id)}/token`, { method: "POST" });
+      setProjectCredential(rotated);
+      await loadData();
+      setProjectCredential(rotated);
+      notify("success", "Project token rotated. The previous token has been revoked.");
+    } catch (error) { notify("error", error instanceof Error ? error.message : "Could not rotate project token."); }
   }
 
   async function deploy(environment: Environment) {
@@ -163,6 +203,7 @@ export function App() {
         <div className="nav-label">WORKSPACE</div>
         <nav className="side-nav" aria-label="Workspace navigation">
           <button className={`nav-item ${view === "environments" && !selected ? "selected" : ""}`} onClick={() => { setSelectedId(null); setView("environments"); }}><Server size={17} /> Mock environments <span className="nav-count">{environments.length}</span></button>
+          <button className={`nav-item ${view === "projects" ? "selected" : ""}`} onClick={() => { setSelectedId(null); setView("projects"); }}><FolderGit2 size={17} /> Projects <span className="nav-count">{projects.length}</span></button>
           <button className={`nav-item ${view === "providers" ? "selected" : ""}`} onClick={() => { setSelectedId(null); setView("providers"); }}><Box size={17} /> Provider catalog</button>
         </nav>
         <div className="side-divider" />
@@ -183,7 +224,7 @@ export function App() {
 
       <main className="main-area">
         <header className="topbar">
-          <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>{selected ? selected.name : view === "providers" ? "Provider catalog" : "Mock environments"}</strong></div>
+          <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>{selected ? selected.name : view === "providers" ? "Provider catalog" : view === "projects" ? "Projects" : "Mock environments"}</strong></div>
           <div className="topbar-actions"><div className="runtime-pill"><span className="runtime-dot" /> Runtime healthy</div><button className="help-button" aria-label="Help"><CircleHelp size={17} /></button><button className="avatar top-avatar" aria-label="Account menu">{auth.email.slice(0, 1).toUpperCase()}</button></div>
         </header>
 
@@ -192,7 +233,7 @@ export function App() {
             environment={selected} busy={busyId === selected.id} onBack={() => setSelectedId(null)}
             onDeploy={() => void deploy(selected)} onStop={() => void stop(selected)} onDelete={() => void deleteEnvironment(selected)}
             onAddRoute={() => setModal("route")} onDeleteRoute={deleteRoute} onSaveDocument={saveDocument}
-          /> : view === "providers" ? <ProviderCatalog templates={templates} onCreate={(template) => { setModal("create"); setCreateTemplate(template.id); }} /> : <>
+          /> : view === "providers" ? <ProviderCatalog templates={templates} onCreate={(template) => { setModal("create"); setCreateTemplate(template.id); }} /> : view === "projects" ? <ProjectsPage projects={projects} onCreate={() => setModal("project")} onRotate={(project) => void rotateProjectToken(project)} onRefresh={() => void loadData()} /> : <>
             <section className="page-heading">
               <div><div className="eyebrow"><span className="eyebrow-line" /> DEVELOPMENT WORKSPACE</div><h1>Mock environments</h1><p>Stable API endpoints for development, integration tests, and demos.</p></div>
               <button className="button primary" onClick={() => { setCreateTemplate(""); setModal("create"); }}><Plus size={16} /> New mock API</button>
@@ -209,7 +250,7 @@ export function App() {
               <div className="table-foot"><span>Showing {filtered.length} of {environments.length} environments</span><a href="#providers" onClick={(event) => { event.preventDefault(); setView("providers"); }}>Browse provider templates <ArrowUpRight size={13} /></a></div>
             </section>
             <div className="bottom-grid">
-              <section className="quickstart panel"><div className="quickstart-icon"><SquareTerminal size={19} /></div><div><div className="panel-kicker">QUICK START</div><h3>Connect your app</h3><p>Set <code>MOCK_SERVER_ORIGIN</code> to your workspace domain. Each provider uses its own environment subdomain.</p><button className="text-button" onClick={() => setView("providers")}>View setup guide <ArrowUpRight size={14} /></button></div></section>
+              <section className="quickstart panel"><div className="quickstart-icon"><SquareTerminal size={19} /></div><div><div className="panel-kicker">QUICK START</div><h3>Connect a project</h3><p>Create a project token, add a <code>mock-server.config.json</code> file, then run the CLI from your project directory.</p><button className="text-button" onClick={() => setView("projects")}>View project setup <ArrowUpRight size={14} /></button></div></section>
               <section className="runtime-card panel"><div className="runtime-card-head"><div><div className="panel-kicker">RUNTIME</div><h3>Mockoon engine</h3></div><span className="health-badge"><span className="runtime-dot" /> Healthy</span></div><div className="runtime-detail"><span>Control plane</span><code>{window.location.host}</code></div><div className="runtime-detail"><span>Hosted APIs</span><code>*.{window.location.host.split(":")[0]}</code></div></section>
             </div>
           </>}
@@ -218,6 +259,8 @@ export function App() {
       </main>
       {modal === "create" && <CreateModal templates={templates} initialTemplate={createTemplate} onClose={() => setModal(null)} onCreate={createEnvironment} />}
       {modal === "route" && selected && <RouteModal onClose={() => setModal(null)} onAdd={addRoute} />}
+      {modal === "project" && <ProjectModal onClose={() => setModal(null)} onCreate={createProject} />}
+      {projectCredential && <ProjectCredentialModal credential={projectCredential} onClose={() => setProjectCredential(null)} />}
       {notice && <div className={`toast ${notice.type}`} role="status"><span className="toast-icon">{notice.type === "success" ? <Check size={16} /> : <X size={16} />}</span>{notice.text}</div>}
     </div>
   );
@@ -248,7 +291,7 @@ function EnvironmentTable({ environments, onOpen, onDeploy, onStop, busyId }: { 
       <td><span className="provider-name">{environment.provider}</span></td><td><span className="route-count">{String(routeCount(environment)).padStart(2, "0")}</span></td>
       <td><div className="endpoint-cell"><a className="endpoint-url" href={environment.url} target="_blank" rel="noreferrer">{environment.url.replace(/^https?:\/\//, "")}</a><button className="copy-mini" aria-label={`Copy ${environment.name} URL`} title="Copy URL" onClick={() => void navigator.clipboard.writeText(environment.url)}><Copy size={13} /></button></div></td>
       <td><span className={`status-pill ${environment.status}`}><span className="status-mark" />{environment.status === "running" ? "Live" : environment.status === "error" ? "Error" : "Stopped"}</span></td>
-      <td><div className="row-actions">{environment.status === "running" ? <button className="text-button stop-action" disabled={busyId === environment.id} onClick={() => onStop(environment)}>{busyId === environment.id ? <LoaderCircle size={14} className="spin" /> : <span className="stop-square" />} Stop</button> : <button className="text-button deploy-action" disabled={busyId === environment.id} onClick={() => onDeploy(environment)}>{busyId === environment.id ? <LoaderCircle size={14} className="spin" /> : <Zap size={14} />} Deploy</button>}<button className="icon-button row-open" aria-label={`Open ${environment.name}`} onClick={() => onOpen(environment)}><ArrowUpRight size={15} /></button></div></td>
+      <td><div className="row-actions">{environment.projectId ? <span className="managed-label">CLI managed</span> : environment.status === "running" ? <button className="text-button stop-action" disabled={busyId === environment.id} onClick={() => onStop(environment)}>{busyId === environment.id ? <LoaderCircle size={14} className="spin" /> : <span className="stop-square" />} Stop</button> : <button className="text-button deploy-action" disabled={busyId === environment.id} onClick={() => onDeploy(environment)}>{busyId === environment.id ? <LoaderCircle size={14} className="spin" /> : <Zap size={14} />} Deploy</button>}<button className="icon-button row-open" aria-label={`Open ${environment.name}`} onClick={() => onOpen(environment)}><ArrowUpRight size={15} /></button></div></td>
     </tr>)}
   </tbody></table></div>;
 }
@@ -267,6 +310,27 @@ function ProviderCatalog({ templates, onCreate }: { templates: Template[]; onCre
       return <section className="provider-section" key={group}><div className="section-title"><h2>{group}</h2><span>{items.length} templates</span></div><div className="provider-grid">{items.map((template) => <article key={template.id} className="provider-card"><div className={`provider-icon provider-${template.id}`}><Code2 size={18} /></div><div className="provider-card-info"><h3>{template.name}</h3><p>{template.description}</p></div><div className="provider-meta"><span><FileJson2 size={13} /> {template.routeCount} routes</span><span><ShieldCheck size={13} /> Auth examples</span></div><button className="button secondary small full" onClick={() => onCreate(template)}><Plus size={14} /> Create environment</button></article>)}</div></section>;
     })}
     <div className="catalog-note"><CircleHelp size={16} /><span>Each starter is a normal Mockoon environment. You can edit routes, rules, response bodies, latency, and headers after creating it.</span></div>
+  </>;
+}
+
+function ProjectsPage({ projects, onCreate, onRotate, onRefresh }: { projects: Project[]; onCreate: () => void; onRotate: (project: Project) => void; onRefresh: () => void }) {
+  return <>
+    <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> PROJECT RUNNERS</div><h1>Projects</h1><p>Start a project from its config file. Its API URLs accept requests while the CLI is connected.</p></div><button className="button primary" onClick={onCreate}><Plus size={16} /> Connect project</button></section>
+    <section className="stat-grid project-stat-grid" aria-label="Project overview">
+      <Stat label="Projects" value={String(projects.length).padStart(2, "0")} detail="Configured in this workspace" icon={<FolderGit2 size={17} />} />
+      <Stat label="Active" value={String(projects.filter((project) => project.status === "active").length).padStart(2, "0")} detail="CLI connected and ready" icon={<Radio size={17} />} tone="green" />
+      <Stat label="Hosted URLs" value={String(projects.reduce((sum, project) => sum + project.environments.length, 0)).padStart(2, "0")} detail="Across connected projects" icon={<Globe2 size={17} />} />
+      <Stat label="Command" value="CLI" detail="Run from a project directory" icon={<SquareTerminal size={17} />} />
+    </section>
+    <section className="panel project-panel">
+      <div className="panel-heading"><div><h2>Connected projects</h2><p>Active status follows the project runner heartbeat.</p></div><button className="button secondary small" onClick={onRefresh}><RefreshCw size={14} /> Refresh</button></div>
+      {projects.length ? <div className="project-list">{projects.map((project) => <article className="project-row" key={project.id}>
+        <div className="project-main"><span className={`project-icon ${project.status}`}><FolderGit2 size={18} /></span><div><h3>{project.name}</h3><p><code>{project.slug}</code> · {project.environments.length} hosted {project.environments.length === 1 ? "URL" : "URLs"}</p></div></div>
+        <div className="project-actions"><span className={`status-pill ${project.status === "active" ? "running" : "stopped"}`}><span className="status-mark" />{project.status === "active" ? "Active · ready" : "Waiting for CLI"}</span><button className="button secondary small" onClick={() => onRotate(project)}><KeyRound size={13} /> Rotate token</button></div>
+        <div className="project-endpoints">{project.environments.length ? project.environments.map((environment) => <a key={environment.id} href={environment.url} target="_blank" rel="noreferrer"><span>{environment.name}</span><code>{environment.url.replace(/^https?:\/\//, "")}</code><ArrowUpRight size={13} /></a>) : <p>URLs will appear after the CLI starts.</p>}</div>
+      </article>)}</div> : <div className="empty-state"><div className="empty-icon"><FolderGit2 size={21} /></div><h3>Connect a project</h3><p>Create a project token, add the config file to your project, then start the CLI to register its URLs.</p><button className="button secondary" onClick={onCreate}><Plus size={15} /> Connect a project</button></div>}
+      <div className="project-panel-foot"><span>Project URLs become unavailable if its CLI stops sending heartbeats.</span><code>mock-server start --project .</code></div>
+    </section>
   </>;
 }
 
@@ -297,7 +361,7 @@ function EnvironmentDetail({ environment, busy, onBack, onDeploy, onStop, onDele
       })}</div> : <div className="empty-routes"><p>No routes yet. Add an endpoint to this environment.</p><button className="button secondary small" onClick={onAddRoute}><Plus size={14} /> Add first route</button></div>}
       <div className="route-panel-foot"><span><ShieldCheck size={14} /> Requests are served by an isolated Mockoon runtime.</span><button className="text-button" onClick={() => setAdvanced(true)}>Advanced configuration <ArrowUpRight size={14} /></button></div>
     </section>
-    <div className="detail-lower-grid"><section className="panel usage-panel"><div className="panel-kicker">CONNECT YOUR APP</div><h3>Use this environment</h3><p>Set your provider’s mock URL to the generated base URL, then restart your app.</p><pre><code><span className="code-key">MOCK_SERVER_ORIGIN</span>=<span className="code-string">{environment.url}</span></code></pre></section><section className="panel info-panel"><div className="panel-kicker">ENVIRONMENT INFO</div><div className="info-row"><span>Provider</span><strong>{environment.provider}</strong></div><div className="info-row"><span>Environment ID</span><code>{environment.id.slice(0, 12)}</code></div><div className="info-row"><span>Routes</span><strong>{routes.length}</strong></div></section></div>
+    <div className="detail-lower-grid"><section className="panel usage-panel"><div className="panel-kicker">CONNECT YOUR APP</div><h3>Use this environment</h3><p>Set this as the provider’s API base URL in your project environment.</p><pre><code><span className="code-string">{environment.url}</span></code></pre></section><section className="panel info-panel"><div className="panel-kicker">ENVIRONMENT INFO</div><div className="info-row"><span>Provider</span><strong>{environment.provider}</strong></div><div className="info-row"><span>Environment ID</span><code>{environment.id.slice(0, 12)}</code></div><div className="info-row"><span>Routes</span><strong>{routes.length}</strong></div></section></div>
   </>;
 }
 
@@ -311,6 +375,27 @@ function CreateModal({ templates, initialTemplate, onClose, onCreate }: { templa
     onCreate(name.trim(), templateId);
   }
   return <Modal title="Create mock environment" onClose={onClose}><form className="modal-form" onSubmit={submit}><p className="modal-description">Start from a provider template. You can update routes and responses after creation.</p><label>Environment name<input autoFocus required maxLength={64} placeholder="e.g. OpenAI staging" value={name} onChange={(event) => setName(event.target.value)} /></label><label>Provider template<select value={templateId} onChange={(event) => setTemplateId(event.target.value)}>{templates.map((template) => <option value={template.id} key={template.id}>{template.name} · {template.routeCount} routes</option>)}</select></label>{error && <div className="field-error" role="alert">{error}</div>}<div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancel</button><button className="button primary"><Plus size={15} /> Create environment</button></div></form></Modal>;
+}
+
+function ProjectModal({ onClose, onCreate }: { onClose: () => void; onCreate: (name: string) => void }) {
+  const [name, setName] = useState("");
+  const [error, setError] = useState("");
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (name.trim().length < 2) { setError("Enter a project name with at least two characters."); return; }
+    onCreate(name.trim());
+  }
+  return <Modal title="Connect a project" onClose={onClose}><form className="modal-form" onSubmit={submit}><p className="modal-description">Create a scoped CLI token for one project. The token will be shown once, then the CLI reads the project config and registers its hosted URLs.</p><label>Project name<input autoFocus required maxLength={64} placeholder="e.g. marketing-app" value={name} onChange={(event) => setName(event.target.value)} /></label>{error && <div className="field-error" role="alert">{error}</div>}<div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancel</button><button className="button primary"><FolderGit2 size={15} /> Create project token</button></div></form></Modal>;
+}
+
+function ProjectCredentialModal({ credential, onClose }: { credential: ProjectCredential; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    await navigator.clipboard.writeText(credential.token);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  }
+  return <Modal title={`${credential.project.name} token`} onClose={onClose}><div className="project-token-content"><p className="modal-description">Save this token in your shell or secret manager. It will not be shown again.</p><label>Project token<div className="token-value"><code>{credential.token}</code><button className="button secondary small" onClick={() => void copy()}>{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? "Copied" : "Copy"}</button></div></label><div className="token-note"><ShieldCheck size={15} /><span>Keep the token out of source control. Set <code>MOCK_SERVER_TOKEN</code> before running the CLI.</span></div><div className="modal-actions"><button className="button primary" onClick={onClose}>Done</button></div></div></Modal>;
 }
 
 function RouteModal({ onClose, onAdd }: { onClose: () => void; onAdd: (input: { method: string; path: string; statusCode: number; body: string; headers: Record<string, string>; latency: number }) => void }) {

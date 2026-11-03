@@ -24,8 +24,22 @@ export class MockoonRuntime {
     await mkdir(this.dataRoot, { recursive: true });
     for (const environment of await this.store.list()) {
       if (environment.status !== "running") continue;
+      if (environment.projectId && !(await this.store.isProjectActive(environment.projectId))) {
+        await this.store.updateStatus(environment.id, "stopped");
+        continue;
+      }
       try { await this.deploy(environment); }
       catch { await this.store.updateStatus(environment.id, "error"); }
+    }
+  }
+
+  async stopInactiveProjects() {
+    for (const project of await this.store.listProjects()) {
+      if (await this.store.isProjectActive(project.id)) continue;
+      const environments = await this.store.listProjectEnvironments(project.id);
+      if (await this.store.isProjectActive(project.id)) continue;
+      for (const environment of environments)
+        if (environment.status === "running") await this.stop(environment.id);
     }
   }
 
@@ -77,6 +91,10 @@ export class MockoonRuntime {
   async resolveSlug(slug: string) {
     const environment = await this.store.getBySlug(slug);
     if (!environment || environment.status !== "running") return undefined;
+    if (environment.projectId && !(await this.store.isProjectActive(environment.projectId))) {
+      await this.stop(environment.id);
+      return undefined;
+    }
     const instance = this.instances.get(environment.id);
     return instance ? { environment, port: instance.port } : undefined;
   }

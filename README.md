@@ -41,10 +41,34 @@ npm run fixtures:validate
 
 ## Marketing app integration
 
-The marketing app uses one `MOCK_SERVER_ORIGIN` setting: the service root domain. It resolves provider names to matching subdomains, such as `google-ads.mockserver.localhost` and `meta-publishing.mockserver.localhost`. Create environments with the provider template names so their generated URLs use those slugs. For local development, set:
+Create a project in the dashboard to get a scoped CLI token. The project repository contains `mock-server.config.json`; it lists the APIs the CLI should make available. A config can use a bundled provider template, a Mockoon JSON file relative to the project, or inline environment data. The first CLI run creates project environments from their templates. Later runs preserve edits made in the dashboard unless the config supplies its own `file` or `data` value.
 
-```sh
-MOCK_SERVER_ORIGIN=http://mockserver.localhost:4310
+For example:
+
+```json
+{
+  "name": "marketing-app",
+  "environments": [
+    { "name": "OpenAI", "slug": "openai", "template": "openai" },
+    { "name": "Google Ads", "slug": "google-ads", "template": "google-ads" }
+  ]
+}
 ```
 
-In a hosted environment, set the root to the deployed domain, such as `https://mocks.example.com`, and deploy provider environments using the matching subdomain slugs. Route both the root domain and `*.mocks.example.com` through TLS to the service.
+Set the token and dashboard URL in your shell, then run the CLI from the project directory:
+
+```sh
+export MOCK_SERVER_URL=http://127.0.0.1:4310
+export MOCK_SERVER_TOKEN='paste-project-token-here'
+npm exec --yes --package=github:yohannesHL/mock-server -- mock-server start --project .
+```
+
+The CLI reads `mock-server.config.json`, starts each configured environment on the service, prints its generated URL, and keeps the project active with heartbeats. The dashboard lists the project and URLs as active while the CLI is connected. When the process stops or loses contact, the service stops accepting requests for those project URLs. If a token is lost, rotate it from the project row in the dashboard; the previous token is revoked.
+
+The app itself only receives its normal per-provider API base URLs. Put the generated URLs in `PROVIDER_API_BASE_URLS`, for example:
+
+```sh
+PROVIDER_API_BASE_URLS='{"openai":"http://marketing-app-openai.mockserver.localhost:4310","google-ads":"http://marketing-app-google-ads.mockserver.localhost:4310"}'
+```
+
+In a hosted environment, set `MOCK_SERVER_URL` to the control-plane domain, such as `https://mocks.example.com`, and route both the root domain and `*.mocks.example.com` through TLS to the service. The project token is scoped to its project and stored hashed by the service.
