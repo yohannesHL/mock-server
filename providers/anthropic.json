@@ -1,0 +1,216 @@
+{
+  "uuid": "66267604-ba27-4ad0-b1be-674014100166",
+  "lastMigration": 33,
+  "name": "Anthropic Messages API",
+  "endpointPrefix": "",
+  "latency": 0,
+  "port": 0,
+  "hostname": "127.0.0.1",
+  "folders": [],
+  "routes": [
+    {
+      "uuid": "76080a09-103c-4d35-9d75-0da48498ee85",
+      "type": "http",
+      "documentation": "",
+      "method": "get",
+      "endpoint": "health",
+      "responses": [
+        {
+          "uuid": "d7d9f808-1c48-4b85-9dda-955cc87a55e1",
+          "body": "{\"ok\":true,\"service\":\"mock-server\"}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Default response",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "bodyType": "INLINE",
+          "filePath": "",
+          "databucketID": "",
+          "sendFileAsBody": false,
+          "rules": [],
+          "rulesOperator": "AND",
+          "disableTemplating": true,
+          "fallbackTo404": false,
+          "default": true,
+          "crudKey": "id",
+          "callbacks": []
+        }
+      ],
+      "responseMode": null,
+      "streamingMode": null,
+      "streamingInterval": 0
+    },
+    {
+      "uuid": "53a8bffc-6969-4f67-979f-69fb82a644c5",
+      "type": "http",
+      "documentation": "",
+      "method": "post",
+      "endpoint": "v1/messages",
+      "responses": [
+        {
+          "uuid": "3972a244-3113-4f35-a509-6ee6147f5b4b",
+          "body": "{\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"x-api-key is invalid\"}}",
+          "latency": 0,
+          "statusCode": 401,
+          "label": "Invalid API key",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "bodyType": "INLINE",
+          "filePath": "",
+          "databucketID": "",
+          "sendFileAsBody": false,
+          "rules": [],
+          "rulesOperator": "AND",
+          "disableTemplating": true,
+          "fallbackTo404": false,
+          "default": true,
+          "crudKey": "id",
+          "callbacks": []
+        },
+        {
+          "uuid": "0fb504f0-7b9e-4609-a92a-249efc4fc7bf",
+          "body": "{\"id\":\"msg_mock_01\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-3-5-haiku-latest\",\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"content\":[{\"type\":\"text\",\"text\":\"This is a sample response from the Anthropic mock environment.\"}],\"usage\":{\"input_tokens\":12,\"output_tokens\":14}}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Successful message",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "bodyType": "INLINE",
+          "filePath": "",
+          "databucketID": "",
+          "sendFileAsBody": false,
+          "rules": [
+            {
+              "target": "header",
+              "modifier": "x-api-key",
+              "value": "mock-anthropic-key",
+              "invert": false,
+              "operator": "equals"
+            }
+          ],
+          "rulesOperator": "AND",
+          "disableTemplating": true,
+          "fallbackTo404": false,
+          "default": false,
+          "crudKey": "id",
+          "callbacks": []
+        }
+      ],
+      "responseMode": null,
+      "streamingMode": null,
+      "streamingInterval": 0
+    },
+    {
+      "uuid": "e4da8eda-aefc-42e9-a1f7-2cb489ad1fb9",
+      "type": "http",
+      "documentation": "",
+      "method": "get",
+      "endpoint": "v1/models",
+      "responses": [
+        {
+          "uuid": "90628da7-6f32-4243-a156-c3509a98932f",
+          "body": "{\"data\":[{\"id\":\"claude-3-5-haiku-latest\",\"type\":\"model\",\"display_name\":\"Claude 3.5 Haiku\"}],\"has_more\":false,\"first_id\":\"claude-3-5-haiku-latest\",\"last_id\":\"claude-3-5-haiku-latest\"}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Model list",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "bodyType": "INLINE",
+          "filePath": "",
+          "databucketID": "",
+          "sendFileAsBody": false,
+          "rules": [
+            {
+              "target": "header",
+              "modifier": "x-api-key",
+              "value": "mock-anthropic-key",
+              "invert": false,
+              "operator": "equals"
+            }
+          ],
+          "rulesOperator": "AND",
+          "disableTemplating": true,
+          "fallbackTo404": false,
+          "default": false,
+          "crudKey": "id",
+          "callbacks": []
+        },
+        {
+          "uuid": "9bd1b21b-da7e-4197-8c20-f2df7f921fa1",
+          "body": "{\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"x-api-key is invalid\"}}",
+          "latency": 0,
+          "statusCode": 401,
+          "label": "Invalid API key",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "bodyType": "INLINE",
+          "filePath": "",
+          "databucketID": "",
+          "sendFileAsBody": false,
+          "rules": [],
+          "rulesOperator": "AND",
+          "disableTemplating": true,
+          "fallbackTo404": false,
+          "default": true,
+          "crudKey": "id",
+          "callbacks": []
+        }
+      ],
+      "responseMode": null,
+      "streamingMode": null,
+      "streamingInterval": 0
+    }
+  ],
+  "rootChildren": [
+    {
+      "type": "route",
+      "uuid": "76080a09-103c-4d35-9d75-0da48498ee85"
+    },
+    {
+      "type": "route",
+      "uuid": "53a8bffc-6969-4f67-979f-69fb82a644c5"
+    },
+    {
+      "type": "route",
+      "uuid": "e4da8eda-aefc-42e9-a1f7-2cb489ad1fb9"
+    }
+  ],
+  "proxyMode": false,
+  "proxyHost": "",
+  "proxyRemovePrefix": false,
+  "tlsOptions": {
+    "enabled": false,
+    "type": "CERT",
+    "pfxPath": "",
+    "certPath": "",
+    "keyPath": "",
+    "caPath": "",
+    "passphrase": ""
+  },
+  "cors": false,
+  "headers": [],
+  "proxyReqHeaders": [],
+  "proxyResHeaders": [],
+  "data": [],
+  "callbacks": []
+}

@@ -1,0 +1,216 @@
+{
+  "uuid": "c335bb13-3a3e-40d2-83b6-0614554bdc28",
+  "lastMigration": 33,
+  "name": "OpenAI Responses API",
+  "endpointPrefix": "",
+  "latency": 0,
+  "port": 0,
+  "hostname": "127.0.0.1",
+  "folders": [],
+  "routes": [
+    {
+      "uuid": "76080a09-103c-4d35-9d75-0da48498ee85",
+      "type": "http",
+      "documentation": "",
+      "method": "get",
+      "endpoint": "health",
+      "responses": [
+        {
+          "uuid": "d7d9f808-1c48-4b85-9dda-955cc87a55e1",
+          "body": "{\"ok\":true,\"service\":\"mock-server\"}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Default response",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "bodyType": "INLINE",
+          "filePath": "",
+          "databucketID": "",
+          "sendFileAsBody": false,
+          "rules": [],
+          "rulesOperator": "AND",
+          "disableTemplating": true,
+          "fallbackTo404": false,
+          "default": true,
+          "crudKey": "id",
+          "callbacks": []
+        }
+      ],
+      "responseMode": null,
+      "streamingMode": null,
+      "streamingInterval": 0
+    },
+    {
+      "uuid": "8ac39aa9-edfe-4e8b-9931-41e36e15d7a0",
+      "type": "http",
+      "documentation": "",
+      "method": "post",
+      "endpoint": "v1/responses",
+      "responses": [
+        {
+          "uuid": "2222606b-5578-4757-8b3d-8c0d7883440c",
+          "body": "{\"error\":{\"message\":\"Invalid API key provided.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\"}}",
+          "latency": 0,
+          "statusCode": 401,
+          "label": "Invalid API key",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "bodyType": "INLINE",
+          "filePath": "",
+          "databucketID": "",
+          "sendFileAsBody": false,
+          "rules": [],
+          "rulesOperator": "AND",
+          "disableTemplating": true,
+          "fallbackTo404": false,
+          "default": true,
+          "crudKey": "id",
+          "callbacks": []
+        },
+        {
+          "uuid": "2b66d1ec-c620-45f4-9b19-cd7226336955",
+          "body": "{\"id\":\"resp_mock_01\",\"object\":\"response\",\"created_at\":1760000000,\"status\":\"completed\",\"model\":\"gpt-4.1-mini\",\"output\":[{\"type\":\"message\",\"id\":\"msg_mock_01\",\"status\":\"completed\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"text\":\"This is a sample response from the OpenAI mock environment.\"}]}],\"usage\":{\"input_tokens\":12,\"output_tokens\":14,\"total_tokens\":26}}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Successful response",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "bodyType": "INLINE",
+          "filePath": "",
+          "databucketID": "",
+          "sendFileAsBody": false,
+          "rules": [
+            {
+              "target": "header",
+              "modifier": "authorization",
+              "value": "Bearer mock-openai-key",
+              "invert": false,
+              "operator": "equals"
+            }
+          ],
+          "rulesOperator": "AND",
+          "disableTemplating": true,
+          "fallbackTo404": false,
+          "default": false,
+          "crudKey": "id",
+          "callbacks": []
+        }
+      ],
+      "responseMode": null,
+      "streamingMode": null,
+      "streamingInterval": 0
+    },
+    {
+      "uuid": "3ef5f33f-2c41-4ab4-8bd6-4c4e96a27947",
+      "type": "http",
+      "documentation": "",
+      "method": "get",
+      "endpoint": "v1/models",
+      "responses": [
+        {
+          "uuid": "577e4677-827f-471e-8478-4981a72b5660",
+          "body": "{\"object\":\"list\",\"data\":[{\"id\":\"gpt-4.1-mini\",\"object\":\"model\",\"owned_by\":\"openai\"}]}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Model list",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "bodyType": "INLINE",
+          "filePath": "",
+          "databucketID": "",
+          "sendFileAsBody": false,
+          "rules": [
+            {
+              "target": "header",
+              "modifier": "authorization",
+              "value": "Bearer mock-openai-key",
+              "invert": false,
+              "operator": "equals"
+            }
+          ],
+          "rulesOperator": "AND",
+          "disableTemplating": true,
+          "fallbackTo404": false,
+          "default": false,
+          "crudKey": "id",
+          "callbacks": []
+        },
+        {
+          "uuid": "ac8e605a-3215-4874-bfda-0b37231acf5f",
+          "body": "{\"error\":{\"message\":\"Invalid API key provided.\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\"}}",
+          "latency": 0,
+          "statusCode": 401,
+          "label": "Invalid API key",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "bodyType": "INLINE",
+          "filePath": "",
+          "databucketID": "",
+          "sendFileAsBody": false,
+          "rules": [],
+          "rulesOperator": "AND",
+          "disableTemplating": true,
+          "fallbackTo404": false,
+          "default": true,
+          "crudKey": "id",
+          "callbacks": []
+        }
+      ],
+      "responseMode": null,
+      "streamingMode": null,
+      "streamingInterval": 0
+    }
+  ],
+  "rootChildren": [
+    {
+      "type": "route",
+      "uuid": "76080a09-103c-4d35-9d75-0da48498ee85"
+    },
+    {
+      "type": "route",
+      "uuid": "8ac39aa9-edfe-4e8b-9931-41e36e15d7a0"
+    },
+    {
+      "type": "route",
+      "uuid": "3ef5f33f-2c41-4ab4-8bd6-4c4e96a27947"
+    }
+  ],
+  "proxyMode": false,
+  "proxyHost": "",
+  "proxyRemovePrefix": false,
+  "tlsOptions": {
+    "enabled": false,
+    "type": "CERT",
+    "pfxPath": "",
+    "certPath": "",
+    "keyPath": "",
+    "caPath": "",
+    "passphrase": ""
+  },
+  "cors": false,
+  "headers": [],
+  "proxyReqHeaders": [],
+  "proxyResHeaders": [],
+  "data": [],
+  "callbacks": []
+}
