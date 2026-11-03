@@ -60,8 +60,10 @@ Set the token and dashboard URL in your shell, then run the CLI from the project
 ```sh
 export MOCK_SERVER_URL=http://127.0.0.1:4310
 export MOCK_SERVER_TOKEN='paste-project-token-here'
-npm exec --yes --package=github:yohannesHL/mock-server -- mock-server start --project .
+node ~/projects/mock-server/bin/mock-server.mjs start --project .
 ```
+
+The command runs the CLI source from the public GitHub repository clone and does not install the dashboard dependencies. If you cloned the repository elsewhere, use that path instead.
 
 The CLI reads `mock-server.config.json`, starts each configured environment on the service, prints its generated URL, and keeps the project active with heartbeats. The dashboard lists the project and URLs as active while the CLI is connected. When the process stops or loses contact, the service stops accepting requests for those project URLs. If a token is lost, rotate it from the project row in the dashboard; the previous token is revoked.
 
